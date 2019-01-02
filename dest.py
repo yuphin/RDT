@@ -5,6 +5,7 @@ from threading import Thread
 
 #handle end-to-end delay calculation and check message integrity
 def display(msg, time):
+    '''
     msgSplit = msg.split('-')
     #check message integrity
     if len(msgSplit) == 3 and msg.endswith('_'):
@@ -18,29 +19,15 @@ def display(msg, time):
             #calculate the time in milliseconds
         elapsed = time*1000 - sentTime*1000
         print(elapsed)
+    '''
+    print(msg)
 
 #set up router sockets
-router1Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-router2Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-router1Socket.bind(("127.0.0.1", 81))
-router2Socket.bind(("127.0.0.1", 82))
+UDP_IP = "127.0.0.1"
+UDP_PORT = 1010
+sock = socket.socket(socket.AF_INET,
+                     socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
 while True:
-    try:
-        # check which sockets are ready for reading
-        r1Socket = router1Socket
-        rlist, w, x = select([router1Socket, router2Socket], [], [], 0)
-        messages = []
-	
-        for availableSocket in rlist:
-            # will run unblockingly whenever a socket has a data rata
-            msg = availableSocket.recv(250)
-            if msg:
-                messages.append(msg)
-                
-	#set currentTime regardless(will be set upon packet arrival)
-        currentTime = datetime.utcnow().timestamp()
-        for message in messages:
-            display(message.decode('utf-8'), currentTime)
-        
-    except socket.error:
-        print("Connection failed")
+    data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
+    print(data.decode('utf-8'))
