@@ -26,13 +26,14 @@ def timeout():
     timer.start()
     print("Resending from this thread: ", threading.current_thread())
 #Create packet with data checksum and  ; as delimiter
-def make_packet(nextSeq,message,checksum):
+def make_packet(nextSeq,message):
+    checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
     return seqToStr(nextSeq)+';'+message+';'+checksum
 def refuse_data(message):
     # just add the data to the global messageList
     message = message.decode('utf-8')
-    checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
-    pkt = make_packet(nextSeq, message, checksum)
+
+    pkt = make_packet(nextSeq, message)
     messageList.append(pkt)
 def rdt_send(message):
     global nextSeq
@@ -40,7 +41,7 @@ def rdt_send(message):
     if(nextSeq  < base + N):
         message = message.decode('utf-8')
         checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
-        pkt = make_packet(nextSeq,message,checksum)
+        pkt = make_packet(nextSeq,message)
         messageList.append(pkt)
         connectedSocket.settimeout(300)
         udpSocket.sendto(pkt.encode('utf-8'), (UDP_IP, UDP_PORT))
