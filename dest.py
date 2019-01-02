@@ -8,8 +8,8 @@ rcvStr = ''
 #set up router sockets
 UDP_IP = "127.0.0.1"
 UDP_PORT = 1010
-sock = socket.socket(socket.AF_INET,
-                     socket.SOCK_DGRAM)
+UDP_PORT_SENDER = 1015
+sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
 mutex = Lock()
 def seqToStr(num):
@@ -17,17 +17,17 @@ def seqToStr(num):
     a = ("0"*(4- len(a))) + a
     return a
 def make_packet(nextSeq,message):
-    checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
+    checksum = hashlib.md5((seqToStr(nextSeq)+';'+message).encode('utf-8')).hexdigest()
     return seqToStr(nextSeq)+';'+message+';'+checksum
 def rdt_rcv(rcvpkt,addr):
     msgs = rcvpkt.split(';')
     global expectedSeq
     mutex.acquire()
-    if notCorrupt(msgs[1],msgs[2]) and hasSeqNum(msgs[0],expectedSeq):
+    if notCorrupt(msgs[0]+';'+msgs[1],msgs[2]) and hasSeqNum(msgs[0],expectedSeq):
         global rcvStr
         # send the ACK
         pkt = make_packet(expectedSeq,'ACK')
-        sock.sendto(pkt.encode('utf-8'),addr)
+        sock.sendto(pkt.encode('utf-8'),(UDP_IP,UDP_PORT_SENDER))
         # append to the resulting string
         rcvStr += msgs[1]
         expectedSeq+=1
@@ -44,5 +44,5 @@ def notCorrupt(data,checksum):
 def hasSeqNum(seqNum,expectedSeq):
     return int(seqNum) == expectedSeq
 while True:
-    data, addr = sock.recvfrom(1024)  # buffer size is 1024 bytes
+    data, addr = sock.recvfrom(1024)
     Thread(target=rdt_rcv, args=(data.decode('utf-8'),addr)).start()
