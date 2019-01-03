@@ -20,7 +20,7 @@ ackMutex = Lock()
 def seqToStr(num):
     a = str(num)
     a = ("0"*(4- len(a))) + a
-    return a
+    return a.encode('ascii')
 #Timeout callback
 def timeout():
     global timer
@@ -28,51 +28,51 @@ def timeout():
     timer.start()
     mutex.acquire()
     for i in range(base,nextSeq):
-        udpSendingSocket.sendto(messageList[i].encode('utf-8'), (UDP_IP, UDP_PORT))
+        udpSendingSocket.sendto(messageList[i], (UDP_IP, UDP_PORT))
     mutex.release()
     print("Resending from this thread: ", threading.current_thread())
-#Create packet with data checksum and  ; as delimiter
+#Create packet with data checksum
 def make_packet(nextSeq,message):
-    msg = seqToStr(nextSeq)+';'+message
-    msg = msg + ";" + hashlib.md5(msg.encode('utf-8')).hexdigest()
+    msg = seqToStr(nextSeq)+message
+    msg = msg+hashlib.md5(msg).digest()
     return msg
 def refuse_data(message):
     # just add the data to the global messageList
-    mereconnectssage = message.decode('utf-8')
+    mereconnectssage = message
 
     pkt = make_packet(nextSeq, message)
     messageList.append(pkt)
 def rdt_send(message):
     global nextSeq
     global timer
-    if(nextSeq  < base + N):
-        message = message.decode('utf-8')
-        if message[-3:] == "END":
+    if(nextSeq  < (base + N)%10000 or (nextSeq >= 10000 - N and nextSeq < (base + N))):
+        if message[-3:] == b"END":
             message = message[0:-3]
-        checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
+        checksum = hashlib.md5(message).digest()
         pkt = make_packet(nextSeq,message)
         messageList.append(pkt)
         connectedSocket.settimeout(300)
-        udpSendingSocket.sendto(pkt.encode('utf-8'), (UDP_IP, UDP_PORT))
+        udpSendingSocket.sendto(pkt, (UDP_IP, UDP_PORT))
         mutex.acquire()
         if (base == nextSeq and timer is  None):
             timer = Timer(0.8, timeout)
             timer.start()
         nextSeq +=1
+        nextSeq %= 10000
         mutex.release()
     else:
         refuse_data(message)
 def notCorrupt(data,checksum):
-    chksm = hashlib.md5(data.encode('utf-8')).hexdigest()
+    chksm = hashlib.md5(data).digest()
     return chksm == checksum
 def rdt_rcv(rcvpkt):
-    msgs = rcvpkt.split(';')
-    if notCorrupt(msgs[0]+';'+msgs[1],msgs[2]):
+    msgs = [rcvpkt[0:4], rcvpkt[4:-16], rcvpkt[-16:]]
+    if notCorrupt(msgs[0]+msgs[1],msgs[2]):
         global base
         global timer
         ackMutex.acquire()
-        base = int(msgs[0])+1
-        if msgs[1] == "END":
+        base = (int(msgs[0].decode('ascii'))+1)%10000
+        if msgs[1] == b"END":
             global reconnect
             reconnect = True
         ackMutex.release()
@@ -109,7 +109,7 @@ while True:
             ack, addr = udpReceivingSocket.recvfrom(1024)
             #ACK Section
             if(ack):
-                Thread(target=rdt_rcv, args=(ack.decode('utf-8'),)).start()
+                Thread(target=rdt_rcv, args=(ack,)).start()
 
     except socket.timeout:
         print("Socket inactive for 5 minutes, timeout")
