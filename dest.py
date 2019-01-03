@@ -3,15 +3,7 @@ from datetime import datetime, timedelta
 from select import select
 from threading import Thread,Lock
 import hashlib
-expectedSeq = 0
-rcvStr = ''
-#set up router sockets
-UDP_IP = "127.0.0.1"
-UDP_PORT = 1010
-UDP_PORT_SENDER = 1015
-sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-sock.bind((UDP_IP, UDP_PORT))
-mutex = Lock()
+
 def seqToStr(num):
     a = str(num)
     a = ("0"*(4- len(a))) + a
@@ -20,6 +12,7 @@ def make_packet(nextSeq,message):
     checksum = hashlib.md5((seqToStr(nextSeq)+';'+message).encode('utf-8')).hexdigest()
     return seqToStr(nextSeq)+';'+message+';'+checksum
 def rdt_rcv(rcvpkt,addr):
+    
     msgs = rcvpkt.split(';')
     global expectedSeq
     mutex.acquire()
@@ -28,14 +21,15 @@ def rdt_rcv(rcvpkt,addr):
         # send the ACK
         pkt = make_packet(expectedSeq,'ACK')
         sock.sendto(pkt.encode('utf-8'),(UDP_IP,UDP_PORT_SENDER))
-        # append to the resulting string
+        # append to the resulting string       
         rcvStr += msgs[1]
         expectedSeq+=1
-        mutex.release()
         # for testing purposes
         print(msgs[1])
+        mutex.release()        
+        
     else:
-        pkt = make_packet(expectedSeq, 'ACK')
+        pkt = make_packet(expectedSeq-1, 'ACK')
         mutex.release()
         sock.sendto(pkt.encode('utf-8'), addr)
 def notCorrupt(data,checksum):
@@ -43,6 +37,17 @@ def notCorrupt(data,checksum):
     return chksm == checksum
 def hasSeqNum(seqNum,expectedSeq):
     return int(seqNum) == expectedSeq
+
+
+mutex = Lock()
+expectedSeq = 0
+rcvStr = ''
+UDP_IP = "127.0.0.1"
+UDP_PORT = 1010
+UDP_PORT_SENDER = 1015
+#set up router sockets    
+sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))   
 while True:
     data, addr = sock.recvfrom(1024)
-    Thread(target=rdt_rcv, args=(data.decode('utf-8'),addr)).start()
+    Thread(target=rdt_rcv, args=(data.decode('utf-8'),addr)).start()  

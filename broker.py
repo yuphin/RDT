@@ -33,11 +33,12 @@ def timeout():
     print("Resending from this thread: ", threading.current_thread())
 #Create packet with data checksum and  ; as delimiter
 def make_packet(nextSeq,message):
-    checksum = hashlib.md5((seqToStr(nextSeq)+';'+message).encode('utf-8')).hexdigest()
-    return seqToStr(nextSeq)+';'+message+';'+checksum
+    msg = seqToStr(nextSeq)+';'+message
+    msg = msg + ";" + hashlib.md5(msg.encode('utf-8')).hexdigest()
+    return msg
 def refuse_data(message):
     # just add the data to the global messageList
-    message = message.decode('utf-8')
+    mereconnectssage = message.decode('utf-8')
 
     pkt = make_packet(nextSeq, message)
     messageList.append(pkt)
@@ -46,6 +47,8 @@ def rdt_send(message):
     global timer
     if(nextSeq  < base + N):
         message = message.decode('utf-8')
+        if message[-3:] == "END":
+            message = message[0:-3]
         checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
         pkt = make_packet(nextSeq,message)
         messageList.append(pkt)
@@ -69,10 +72,14 @@ def rdt_rcv(rcvpkt):
         global timer
         ackMutex.acquire()
         base = int(msgs[0])+1
+        if msgs[1] == "END":
+            global reconnect
+            reconnect = True
         ackMutex.release()
         mutex.acquire()
         if base == nextSeq:
             timer.cancel()
+            timer = None
         else:
             timer.cancel()
             timer = Timer(0.8, timeout)
@@ -98,11 +105,11 @@ while True:
         else:
             print("All messages sent, waiting for reconnection...")
             reconnect = True
-
-        ack, addr = udpReceivingSocket.recvfrom(1024)
-        #ACK Section
-        if(ack):
-            Thread(target=rdt_rcv, args=(ack.decode('utf-8'),)).start()
+        if not reconnect:
+            ack, addr = udpReceivingSocket.recvfrom(1024)
+            #ACK Section
+            if(ack):
+                Thread(target=rdt_rcv, args=(ack.decode('utf-8'),)).start()
 
     except socket.timeout:
         print("Socket inactive for 5 minutes, timeout")
