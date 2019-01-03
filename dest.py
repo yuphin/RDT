@@ -11,7 +11,7 @@ def seqToStr(num):
 def make_packet(nextSeq,message):
     checksum = hashlib.md5((seqToStr(nextSeq)+';'+message).encode('utf-8')).hexdigest()
     return seqToStr(nextSeq)+';'+message+';'+checksum
-def rdt_rcv(rcvpkt,addr):
+def rdt_rcv(rcvpkt,addr,msock):
     
     msgs = rcvpkt.split(';')
     global expectedSeq
@@ -20,7 +20,7 @@ def rdt_rcv(rcvpkt,addr):
         global rcvStr
         # send the ACK
         pkt = make_packet(expectedSeq,'ACK')
-        sock.sendto(pkt.encode('utf-8'),(UDP_IP,UDP_PORT_SENDER))
+        msock.sendto(pkt.encode('utf-8'),addr)
         # append to the resulting string       
         rcvStr += msgs[1]
         expectedSeq+=1
@@ -31,7 +31,7 @@ def rdt_rcv(rcvpkt,addr):
     else:
         pkt = make_packet(expectedSeq-1, 'ACK')
         mutex.release()
-        sock.sendto(pkt.encode('utf-8'), addr)
+        msock.sendto(pkt.encode('utf-8'), addr)
 def notCorrupt(data,checksum):
     chksm = hashlib.md5(data.encode('utf-8')).hexdigest()
     return chksm == checksum
@@ -44,10 +44,14 @@ expectedSeq = 0
 rcvStr = ''
 UDP_IP = "127.0.0.1"
 UDP_PORT = 1010
-UDP_PORT_SENDER = 1015
+UDP_PORT2 = 1011
 #set up router sockets    
 sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-sock.bind((UDP_IP, UDP_PORT))   
+sock.bind((UDP_IP, UDP_PORT))
+sock2 = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+sock2.bind((UDP_IP, UDP_PORT2))
 while True:
-    data, addr = sock.recvfrom(1024)
-    Thread(target=rdt_rcv, args=(data.decode('utf-8'),addr)).start()  
+    ready_socks, _, _ = select([sock,sock2], [], [])
+    for msock in ready_socks:
+        data, addr = msock.recvfrom(1024)
+        Thread(target=rdt_rcv, args=(data.decode('utf-8'),addr,msock)).start()

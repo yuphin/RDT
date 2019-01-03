@@ -3,20 +3,26 @@ import sys
 import threading
 from threading import Thread,Lock
 from threading import  Timer
+from select import select
 import hashlib
 base = 0
 nextSeq = 0
 N = 9
+routeSwitch = 1
 timer = None
 # destination ip and ports
 UDP_IP = "127.0.0.1"
 UDP_PORT = 1010
+UDP_PORT2 = 1011
+#SENDER SOCKET
 UDP_PORT_SENDER = 1015
+UDP_PORT_SENDER2 = 1016
 # list that holds the packets from TCP stream
 messageList = []
 reconnect = True
 mutex = Lock()
 ackMutex = Lock()
+routeMutex = Lock()
 def seqToStr(num):
     a = str(num)
     a = ("0"*(4- len(a))) + a
@@ -42,6 +48,18 @@ def refuse_data(message):
 
     pkt = make_packet(nextSeq, message)
     messageList.append(pkt)
+def routeTo(pkt):
+    route = 0
+    for ch in pkt:
+        route ^= ord(ch)
+    route = route & 0x01
+
+    if route:
+        print('a is a')
+        udpSendingSocket.sendto(pkt.encode('utf-8'), (UDP_IP, UDP_PORT))
+    else:
+        print('b is b')
+        udpSendingSocket2.sendto(pkt.encode('utf-8'), (UDP_IP, UDP_PORT2))
 def rdt_send(message):
     global nextSeq
     global timer
@@ -49,11 +67,12 @@ def rdt_send(message):
         message = message.decode('utf-8')
         if message[-3:] == "END":
             message = message[0:-3]
-        checksum = hashlib.md5(message.encode('utf-8')).hexdigest()
         pkt = make_packet(nextSeq,message)
         messageList.append(pkt)
         connectedSocket.settimeout(300)
-        udpSendingSocket.sendto(pkt.encode('utf-8'), (UDP_IP, UDP_PORT))
+        routeMutex.acquire()
+        routeTo(pkt)
+        routeMutex.release()
         mutex.acquire()
         if (base == nextSeq and timer is  None):
             timer = Timer(0.8, timeout)
@@ -91,8 +110,10 @@ tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tcpSocket.bind(("127.0.0.1", 8080))
 tcpSocket.listen(1)
 udpSendingSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udpReceivingSocket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-udpReceivingSocket.bind((UDP_IP, UDP_PORT_SENDER))
+udpSendingSocket.bind((UDP_IP, UDP_PORT_SENDER))
+udpSendingSocket2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udpSendingSocket2.bind((UDP_IP, UDP_PORT_SENDER2))
+
 while True:
     try:
         if reconnect:
@@ -106,11 +127,11 @@ while True:
             print("All messages sent, waiting for reconnection...")
             reconnect = True
         if not reconnect:
-            ack, addr = udpReceivingSocket.recvfrom(1024)
-            #ACK Section
-            if(ack):
+            ready_socks, _, _ = select([udpSendingSocket, udpSendingSocket2], [], [])
+            for sock in ready_socks:
+                ack, addr = sock.recvfrom(200)
+                # ACK Section
                 Thread(target=rdt_rcv, args=(ack.decode('utf-8'),)).start()
-
     except socket.timeout:
         print("Socket inactive for 5 minutes, timeout")
         break
@@ -118,5 +139,4 @@ while True:
 connectedSocket.close()
 tcpSocket.close()
 udpSendingSocket.close()
-udpReceivingSocket.close()
 
