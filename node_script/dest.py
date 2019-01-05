@@ -2,8 +2,10 @@ import socket
 from datetime import datetime, timedelta
 from select import select
 from threading import Thread,Lock
+from timeit import default_timer as timer
 import hashlib
-
+import sys
+# Utility functions which are same as in broker
 def seqToStr(num):
     a = str(num)
     a = ("0"*(4- len(a))) + a
@@ -15,21 +17,32 @@ def rdt_rcv(rcvpkt,addr,msock):
     
     msgs = [rcvpkt[0:4], rcvpkt[4:-16], rcvpkt[-16:]]
     global expectedSeq
-    mutex.acquire()    
+    mutex.acquire()
+    #If the data we received isn't corrupt and if it has the expected sequence number...
     if notCorrupt(msgs[0]+msgs[1],msgs[2]) and hasSeqNum(msgs[0],expectedSeq):
         global rcvStr
         # send the ACK
         pkt = make_packet(expectedSeq,b'ACK')
         msock.sendto(pkt,addr)
+        #If it's the END command, start writing to file and display estimated time
+        ending = msgs[1][-3:] == b'END'
+        if ending:
+            end = timer()
+            print(round((end-start)*1000, 2), " ms")
+            msgs[1] = msgs[1][:-3]
         # append to the resulting string       
         rcvStr += msgs[1]
+        if ending and len(sys.argv) >= 2:
+            with open(sys.argv[1], "wb") as f:
+                f.write(rcvStr)
         expectedSeq+=1
         expectedSeq %= 10000
         # for testing purposes
-        print(msgs[1].decode("iso-8859-1"))
+        #print(msgs[1].decode("iso-8859-1"))
         mutex.release()        
         
     else:
+        #Else, just send an ACK with the last successfully received sequence number
         pkt = make_packet(expectedSeq-1, b'ACK')
         mutex.release()
         msock.sendto(pkt, addr)
@@ -41,8 +54,11 @@ def hasSeqNum(seqNum,expectedSeq):
 
 
 mutex = Lock()
+resetMutex = Lock()
 expectedSeq = 0
 rcvStr = b''
+start = None
+reset = True
 #destination ip and ports
 UDP_IP = "10.10.3.2"
 UDP_PORT = 20787
@@ -54,7 +70,12 @@ sock.bind((UDP_IP, UDP_PORT))
 sock2 = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 sock2.bind((UDP_IP2, UDP_PORT2))
 while True:
+    #Listen both of the sockets
     ready_socks, _, _ = select([sock,sock2], [], [])
+    if reset:
+        reset = False
+        start = timer()
     for msock in ready_socks:
         data, addr = msock.recvfrom(1024)
+        #Spawn threads upon receiving data
         Thread(target=rdt_rcv, args=(data,addr,msock)).start()

@@ -16,24 +16,16 @@ else:
     signal.signal(signal.SIGTERM, terminate)
     # create socket and connect to interface-1 of broker
     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # message size to be sent
-    sampleSize = 5000
-    # send the emulation delay data along with the message- not used for now
-    netem = 1
     print("Trying to connect to broker...")
     soc.connect(("10.10.1.2", 20800))
     print("Connected")
     try:
+        #○pen the file
         with open(sys.argv[1], "rb") as f:
             msg = f.read()
+        #send the message
         soc.send(msg)
-        #for i in range(0, sampleSize):
-            # get current time
-            #currentTime = datetime.utcnow().strftime("%Y %m %d %H %M %S %f")
-            # generate time
-            #soc.send(('asdasdsadsadsadsa--hihihihi'+str(i)+'-').encode('utf-8'))
-            #soc.send(msg)
-            # sleep for 8 milliseconds before sending a message again
+        #send terminating command-END
         terminate()
     except socket.error:
         print("Connection failed: Destination port not open.")

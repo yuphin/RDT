@@ -18,7 +18,7 @@ UDP_PORT2 = 1011
 UDP_PORT_SENDER = 1015
 UDP_PORT_SENDER2 = 1016
 # list that holds the packets from TCP stream
-messageList = []
+messageList = [None]*6000
 reconnect = True
 mutex = Lock()
 ackMutex = Lock()
@@ -46,8 +46,12 @@ def refuse_data(message):
     # just add the data to the global messageList
     mereconnectssage = message
 
+
+    mutex.acquire()
     pkt = make_packet(nextSeq, message)
-    messageList.append(pkt)
+    messageList[nextSeq]=pkt
+    mutex.release()
+
 def routeTo(pkt):
     route = 0
     for ch in pkt[-16:]:
@@ -62,15 +66,19 @@ def routeTo(pkt):
 def rdt_send(message):
     global nextSeq
     global timer
+    mutex.acquire()
     if(nextSeq  < (base + N)%10000 or (nextSeq >= 10000 - N and nextSeq < (base + N))):
+        mutex.release()
         if message[-3:] == b"END":
             message = message[0:-3]
-        checksum = hashlib.md5(message).digest()
+        mutex.acquire()
         pkt = make_packet(nextSeq,message)
-        messageList.append(pkt)
+        mutex.release()
         connectedSocket.settimeout(300)
         routeTo(pkt)
         mutex.acquire()
+        print(nextSeq)
+        messageList[nextSeq] = pkt
         if (base == nextSeq and timer is  None):
             timer = Timer(0.8, timeout)
             timer.start()
@@ -118,7 +126,7 @@ while True:
             reconnect = False
             connectedSocket, connectedAddress = tcpSocket.accept()
             print("Accepted connection from ", connectedAddress)
-        message = connectedSocket.recv(200)
+        message = connectedSocket.recv(970)
         if message:
             Thread(target=rdt_send,args=(message,)).start()
         else:
