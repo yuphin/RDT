@@ -2,7 +2,9 @@ import socket
 from datetime import datetime, timedelta
 from select import select
 from threading import Thread,Lock
+from timeit import default_timer as timer
 import hashlib
+import sys
 
 def seqToStr(num):
     a = str(num)
@@ -21,12 +23,20 @@ def rdt_rcv(rcvpkt,addr,msock):
         # send the ACK
         pkt = make_packet(expectedSeq,b'ACK')
         msock.sendto(pkt,addr)
+        ending = msgs[1][-3:] == b'END'
+        if ending:
+            end = timer()
+            print(round((end-start)*1000, 2), " ms")
+            msgs[1] = msgs[1][:-3]
         # append to the resulting string       
         rcvStr += msgs[1]
+        if ending and len(sys.argv) >= 2:
+            with open(sys.argv[1], "wb") as f:
+                f.write(rcvStr)
         expectedSeq+=1
         expectedSeq %= 10000
         # for testing purposes
-        print(msgs[1].decode("iso-8859-1"))
+        #print(msgs[1].decode("iso-8859-1"))
         mutex.release()        
         
     else:
@@ -41,18 +51,26 @@ def hasSeqNum(seqNum,expectedSeq):
 
 
 mutex = Lock()
+resetMutex = Lock()
 expectedSeq = 0
 rcvStr = b''
-UDP_IP = "127.0.0.1"
-UDP_PORT = 1010
-UDP_PORT2 = 1011
+start = None
+reset = True
+#destination ip and ports
+UDP_IP = "10.10.3.2"
+UDP_PORT = 20787
+UDP_IP2 = "10.10.5.2"
+UDP_PORT2 = 20787
 #set up router sockets    
 sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
 sock2 = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-sock2.bind((UDP_IP, UDP_PORT2))
+sock2.bind((UDP_IP2, UDP_PORT2))
 while True:
     ready_socks, _, _ = select([sock,sock2], [], [])
+    if reset:
+        reset = False
+        start = timer()
     for msock in ready_socks:
         data, addr = msock.recvfrom(1024)
         Thread(target=rdt_rcv, args=(data,addr,msock)).start()

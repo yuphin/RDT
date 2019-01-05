@@ -21,7 +21,7 @@ else:
     # send the emulation delay data along with the message- not used for now
     netem = 1
     print("Trying to connect to broker...")
-    soc.connect(("127.0.0.1", 8080))
+    soc.connect(("10.10.1.2", 20800))
     print("Connected")
     try:
         with open(sys.argv[1], "rb") as f:
