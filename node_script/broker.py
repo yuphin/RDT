@@ -58,11 +58,8 @@ def make_packet(nextSeq,message):
     return msg
 #Route the packet
 def routeTo(pkt):
-    # XOR the checksum to determine which path is going to be taken
-    route = 0
-    for ch in pkt[-16:]:
-        route ^= ch
-    route = route & 0x01
+    # Look at the last byte of checksum to route packets
+    route = pkt[-1] & 0x01
     if route:
         udpSendingSocket.sendto(pkt, (UDP_IP, UDP_PORT))
     else:
